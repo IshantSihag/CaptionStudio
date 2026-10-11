@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caption Studio</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-ico">🎬</span>Caption<b>Studio</b></div>
+  <div class="top-actions">
+    <span id="savePill" class="pill hidden"></span>
+    <button id="btnRegenerate" class="btn ghost hidden" title="Transcribe this video again from scratch">↻ Regenerate</button>
+    <button id="btnStartOver" class="btn ghost hidden">Start over</button>
+    <button id="btnExport" class="btn primary hidden">⬇ Export video</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ======================= SETUP ======================= -->
+  <section id="screen-setup" class="screen">
+    <div class="hero">
+      <div class="hero-ico">🗣️💬</div>
+      <h1>Add captions to your video</h1>
+      <p class="sub">Transcribe, check and burn subtitles into your video — everything
+      runs locally on this computer. Nothing is ever uploaded.</p>
+    </div>
+
+    <div id="toolBanner" class="banner danger hidden"></div>
+    <div id="toolOk" class="banner ok hidden"></div>
+
+    <div class="card pick-card">
+      <button id="btnChoose" class="btn primary big">Choose a video file…</button>
+      <div class="or"><span>or paste the full file path</span></div>
+      <div class="row">
+        <input id="pathInput" type="text" placeholder="/Users/you/Movies/my-video.mp4"
+               spellcheck="false" autocomplete="off">
+        <button id="btnUsePath" class="btn">Open</button>
+      </div>
+      <p id="setupMsg" class="msg" role="alert"></p>
+    </div>
+
+    <details class="help card" id="helpBox">
+      <summary>What do I need installed?</summary>
+      <div class="help-body">
+        <p>Caption Studio uses two free tools. They only need to be installed once:</p>
+        <ol>
+          <li><b>ffmpeg</b> — extracts the audio and burns the captions in<br>
+              <code>brew install ffmpeg</code></li>
+          <li><b>whisper-ctranslate2</b> — turns speech into text<br>
+              <code>python3 -m pip install -U whisper-ctranslate2</code></li>
+        </ol>
+        <p class="muted">Then click “Check again” below. (The very first transcription also
+        downloads the “small” speech model, about 460&nbsp;MB — that only happens once.)</p>
+        <button id="btnRecheck" class="btn ghost">Check again</button>
+      </div>
+    </details>
+  </section>
+
+  <!-- ======================= WORK / PROGRESS ======================= -->
+  <section id="screen-work" class="screen hidden">
+    <div class="card work-card">
+      <h2 id="workTitle">Working…</h2>
+      <p id="workFile" class="muted mono"></p>
+      <ol id="stepList" class="steps"></ol>
+      <div class="pbar"><div id="pbarFill" class="pbar-fill"></div></div>
+      <div class="row between">
+        <p id="workMsg" class="msg"></p>
+        <p id="workElapsed" class="muted"></p>
+      </div>
+      <details class="logbox">
+        <summary>Technical log</summary>
+        <pre id="logPre"></pre>
+      </details>
+      <div class="row end">
+        <button id="btnCancelJob" class="btn danger ghost">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= EDITOR ======================= -->
+  <section id="screen-editor" class="screen hidden">
+    <div class="editor-grid">
+
+      <div class="video-card card">
+        <div id="playerBox" class="player-box">
+          <video id="player" controls playsinline preload="auto"></video>
+          <img id="frameImg" class="layer hidden" alt="">
+          <div id="capOverlay" class="layer cap-overlay hidden"></div>
+          <div id="frameBusy" class="frame-busy hidden">Rendering exact frame…</div>
+        </div>
+        <div class="video-meta">
+          <span id="timeLabel" class="mono">0:00 / 0:00</span>
+          <span class="hint">▶ playing = live overlay &nbsp;·&nbsp; ⏸ paused = <b>the exact exported frame</b></span>
+        </div>
+        <div id="timeline" class="timeline" title="Click to seek"></div>
+        <div class="file-line">
+          <span id="videoName" class="mono muted"></span>
+          <button id="btnShowWork" class="btn ghost small" title="Show where the working files live">Where are my files?</button>
+        </div>
+      </div>
+
+      <div class="edit-card card">
+        <div class="tabs">
+          <button class="tab active" data-tab="cues">Captions</button>
+          <button class="tab" data-tab="style">Style</button>
+          <button class="tab" data-tab="raw">Raw .ass file</button>
+        </div>
+
+        <div id="tab-cues" class="tabpane">
+          <div class="pane-tools">
+            <span id="cueCount" class="muted"></span>
+            <button id="btnAddCue" class="btn small">+ Add caption at playhead</button>
+          </div>
+          <div class="cue-legend muted">
+            Click a caption to jump to it · <b>S</b>/<b>E</b> set its start/end to the
+            current video time · <b>✕</b> deletes it
+          </div>
+          <div id="cueList" class="cue-list"></div>
+          <div id="cuesEmpty" class="empty hidden">
+            <p>No captions yet.</p>
+            <button id="btnAddCue2" class="btn primary">+ Add the first caption</button>
+          </div>
+        </div>
+
+        <div id="tab-style" class="tabpane hidden">
+          <div class="form-grid">
+            <label>Font
+              <input id="stFont" type="text" value="Arial" autocomplete="off">
+            </label>
+            <label>Size <span class="muted">(pixels)</span>
+              <input id="stSize" type="number" min="6" max="300">
+            </label>
+            <label>Text colour
+              <input id="stColor" type="color" value="#ffffff">
+            </label>
+            <label>Look
+              <select id="stBox">
+                <option value="1">Outline only</option>
+                <option value="3">Box behind text</option>
+              </select>
+            </label>
+            <label>Background / outline colour
+              <input id="stOutline" type="color" value="#000000">
+            </label>
+            <label>Background opacity <span class="muted" id="stBgOpVal">100%</span>
+              <input id="stBgOp" type="range" min="0" max="100" step="1" value="100">
+            </label>
+            <label>Padding — horizontal <span class="muted">(px)</span>
+              <input id="stWidthX" type="number" min="0" max="120" value="2">
+            </label>
+            <label>Padding — vertical <span class="muted">(px)</span>
+              <input id="stWidthY" type="number" min="0" max="120" value="2">
+            </label>
+            <label>Position
+              <select id="stPos">
+                <option value="2">Bottom</option>
+                <option value="5">Middle</option>
+                <option value="8">Top</option>
+              </select>
+            </label>
+            <label>Distance from the edge
+              <input id="stMargin" type="number" min="0" max="600">
+            </label>
+          </div>
+          <p class="muted" style="margin-top:14px">
+            Applies to every caption at once. Pause the video to see the exact result.<br>
+            <b>Background opacity</b>: 100% = solid colour, lower = you can see the video
+            through the caption background (50% looks like a smoked-glass panel).
+            With “Outline only” it fades the outline instead.<br>
+            <b>Padding</b>: the space around the text. With “Box behind text” it is the
+            box padding left/right vs top/bottom; with “Outline only” it is the stroke
+            thickness in each direction.
+          </p>
+        </div>
+
+        <div id="tab-raw" class="tabpane hidden">
+          <div class="pane-tools">
+            <span class="muted">Real content of <code>audio.ass</code> — edits save automatically</span>
+          </div>
+          <textarea id="rawAss" spellcheck="false" wrap="off"></textarea>
+          <p id="rawWarn" class="msg hidden"></p>
+        </div>
+
+        <div class="pane-foot">
+          <button id="btnRevert" class="btn ghost small">Revert to last saved</button>
+          <span id="dirtyNote" class="muted"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= EXPORT ======================= -->
+  <section id="screen-export" class="screen hidden">
+    <div class="card export-card" id="exportCard"></div>
+  </section>
+
+</main>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
